@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis
+    ports:
+      - "6380:6379"
+    networks:
+      - rag_network
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: rag_chroma
+    ports:
+      - "8082:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - rag_network
+
+  fastapi:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: rag_fastapi
+    env_file:
+      - .env
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./app:/app
+      - ./agents:/app/agents
+    depends_on:
+      - redis
+      - chroma
+    networks:
+      - rag_network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  streamlit:
+    build:
+      context: ./streamlit_app
+      dockerfile: Dockerfile
+    container_name: rag_streamlit
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./streamlit_app:/app
+    depends_on:
+      - fastapi
+    networks:
+      - rag_network
+    command: streamlit run app.py --server.port 8501
+
+volumes:
+  chroma_data:
+
+networks:
+  rag_network:
+    driver: bridge

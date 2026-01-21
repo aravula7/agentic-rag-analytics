@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+venv/
+.venv
+
+# Embeddings and vector DB
+embeddings/
+*.faiss
+*.index
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+credentials.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Cache
+.cache/
+*.cache
