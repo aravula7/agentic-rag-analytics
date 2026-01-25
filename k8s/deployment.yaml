@@ -1,0 +1,198 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-analytics-api
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-analytics
+      component: api
+  template:
+    metadata:
+      labels:
+        app: rag-analytics
+        component: api
+    spec:
+      containers:
+      - name: fastapi
+        image: your-registry/rag-analytics-api:latest
+        ports:
+        - containerPort: 8001
+          name: http
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: rag-analytics-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: rag-analytics-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: rag-analytics-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: rag-analytics-secrets
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rag-analytics-secrets
+              key: DB_PASSWORD
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rag-analytics-secrets
+              key: OPENAI_API_KEY
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rag-analytics-secrets
+              key: ANTHROPIC_API_KEY
+        envFrom:
+        - configMapRef:
+            name: rag-analytics-config
+        - secretRef:
+            name: rag-analytics-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-analytics-streamlit
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: streamlit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-analytics
+      component: streamlit
+  template:
+    metadata:
+      labels:
+        app: rag-analytics
+        component: streamlit
+    spec:
+      containers:
+      - name: streamlit
+        image: your-registry/rag-analytics-streamlit:latest
+        ports:
+        - containerPort: 8501
+          name: http
+        env:
+        - name: API_URL
+          value: "http://rag-analytics-api-service:8001"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-analytics
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: rag-analytics
+        component: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chroma
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: chroma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-analytics
+      component: chroma
+  template:
+    metadata:
+      labels:
+        app: rag-analytics
+        component: chroma
+    spec:
+      containers:
+      - name: chroma
+        image: chromadb/chroma:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        volumeMounts:
+        - name: chroma-data
+          mountPath: /chroma/chroma
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: chroma-data
+        persistentVolumeClaim:
+          claimName: chroma-pvc

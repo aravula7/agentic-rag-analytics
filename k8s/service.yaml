@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-analytics-api-service
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: api
+spec:
+  type: LoadBalancer
+  selector:
+    app: rag-analytics
+    component: api
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-analytics-streamlit-service
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: streamlit
+spec:
+  type: LoadBalancer
+  selector:
+    app: rag-analytics
+    component: streamlit
+  ports:
+  - port: 8501
+    targetPort: 8501
+    protocol: TCP
+    name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: rag-analytics
+    component: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chroma-service
+  namespace: default
+  labels:
+    app: rag-analytics
+    component: chroma
+spec:
+  type: ClusterIP
+  selector:
+    app: rag-analytics
+    component: chroma
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http

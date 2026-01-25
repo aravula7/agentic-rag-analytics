@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-analytics-config
+  namespace: default
+data:
+  # Database (use external RDS)
+  DB_HOST: "your-rds-endpoint.rds.amazonaws.com"
+  DB_PORT: "5432"
+  DB_NAME: "postgres"
+  
+  # S3 (use AWS S3)
+  S3_BUCKET_NAME: "rag-reports"
+  AWS_REGION: "us-east-1"
+  
+  # Redis
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  
+  # Chroma
+  CHROMA_HOST: "chroma-service"
+  CHROMA_PORT: "8000"
+  CHROMA_COLLECTION: "schema_embeddings"
+  
+  # LLM Models
+  OPENAI_GENERAL_MODEL: "gpt-4o"
+  OPENAI_EMBEDDING_MODEL: "text-embedding-3-small"
+  ANTHROPIC_SQL_MODEL: "claude-haiku-4-20250514"
+  
+  # Email
+  SMTP_HOST: "email-smtp.us-east-1.amazonaws.com"
+  SMTP_PORT: "587"
+  
+  # Application
+  API_HOST: "0.0.0.0"
+  API_PORT: "8001"
+  LOG_LEVEL: "INFO"
+  
+  # Agent Config
+  SQL_RETRY_MAX: "3"
+  QUERY_TIMEOUT: "30"
+  ENABLE_CACHE: "true"
