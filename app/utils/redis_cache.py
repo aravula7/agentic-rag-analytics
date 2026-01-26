@@ -1,129 +1,97 @@
-"""Redis caching utility."""
+"""Redis caching utility - Upstash compatible."""
 
 import logging
 import json
 import hashlib
 from typing import Optional, Any
-import redis
+import requests
 
 logger = logging.getLogger(__name__)
 
 
 class RedisCache:
-    """Redis cache for query results."""
+    """Redis cache using Upstash REST API."""
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 6380,
-        password: Optional[str] = None,
+        rest_url: str,
+        rest_token: str,
         ttl: int = 86400
     ):
-        """Initialize Redis cache.
+        """Initialize Upstash Redis cache.
         
         Args:
-            host: Redis host
-            port: Redis port
-            password: Redis password
+            rest_url: Upstash REST URL
+            rest_token: Upstash REST token
             ttl: Time-to-live in seconds
         """
+        self.rest_url = rest_url.rstrip('/')
+        self.headers = {"Authorization": f"Bearer {rest_token}"}
         self.ttl = ttl
-        self.redis_client = redis.Redis(
-            host=host,
-            port=port,
-            password=password,
-            decode_responses=True
-        )
-        logger.info(f"RedisCache initialized: {host}:{port}")
+        logger.info(f"RedisCache initialized with Upstash")
 
     def _generate_key(self, query: str) -> str:
-        """Generate cache key from query.
-        
-        Args:
-            query: User query string
-            
-        Returns:
-            MD5 hash of query
-        """
+        """Generate cache key from query."""
         return f"query:{hashlib.md5(query.encode()).hexdigest()}"
 
     def get(self, query: str) -> Optional[dict]:
-        """Get cached result for query.
-        
-        Args:
-            query: User query string
-            
-        Returns:
-            Cached result dict or None
-        """
+        """Get cached result for query."""
         key = self._generate_key(query)
         try:
-            cached = self.redis_client.get(key)
-            if cached:
-                logger.info(f"Cache HIT for query: {query[:50]}...")
-                return json.loads(cached)
-            else:
-                logger.info(f"Cache MISS for query: {query[:50]}...")
-                return None
+            response = requests.get(
+                f"{self.rest_url}/get/{key}",
+                headers=self.headers
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('result'):
+                    logger.info(f"Cache HIT for query: {query[:50]}...")
+                    return json.loads(data['result'])
+            logger.info(f"Cache MISS for query: {query[:50]}...")
+            return None
         except Exception as e:
             logger.error(f"Redis get error: {e}")
             return None
 
     def set(self, query: str, result: dict):
-        """Cache result for query.
-        
-        Args:
-            query: User query string
-            result: Result dictionary to cache
-        """
+        """Cache result for query."""
         key = self._generate_key(query)
         try:
-            self.redis_client.setex(
-                key,
-                self.ttl,
-                json.dumps(result)
+            requests.post(
+                f"{self.rest_url}/setex/{key}/{self.ttl}",
+                headers=self.headers,
+                json=json.dumps(result)
             )
             logger.info(f"Cached result for query: {query[:50]}...")
         except Exception as e:
             logger.error(f"Redis set error: {e}")
 
     def delete(self, query: str):
-        """Delete cached result.
-        
-        Args:
-            query: User query string
-        """
+        """Delete cached result."""
         key = self._generate_key(query)
         try:
-            self.redis_client.delete(key)
+            requests.post(
+                f"{self.rest_url}/del/{key}",
+                headers=self.headers
+            )
             logger.info(f"Deleted cache for query: {query[:50]}...")
         except Exception as e:
             logger.error(f"Redis delete error: {e}")
 
     def clear_all(self):
         """Clear all cached queries."""
-        try:
-            for key in self.redis_client.scan_iter("query:*"):
-                self.redis_client.delete(key)
-            logger.info("Cleared all cached queries")
-        except Exception as e:
-            logger.error(f"Redis clear error: {e}")
+        logger.warning("clear_all not implemented for Upstash REST API")
 
     def get_stats(self) -> dict:
-        """Get cache statistics.
-        
-        Returns:
-            Dict with cache stats
-        """
+        """Get cache statistics."""
         try:
-            info = self.redis_client.info()
-            total_keys = self.redis_client.dbsize()
-            return {
-                "total_keys": total_keys,
-                "memory_used_mb": info.get('used_memory', 0) / (1024 * 1024),
-                "hits": info.get('keyspace_hits', 0),
-                "misses": info.get('keyspace_misses', 0)
-            }
+            response = requests.get(
+                f"{self.rest_url}/dbsize",
+                headers=self.headers
+            )
+            if response.status_code == 200:
+                return {"total_keys": response.json().get('result', 0)}
+            return {}
         except Exception as e:
             logger.error(f"Redis stats error: {e}")
             return {}

@@ -156,15 +156,20 @@ minio.exe server C:\minio\data --console-address ":9001"
 # Create bucket: rag-reports
 ```
 
-### 4. Generate Schema Embeddings (One-Time)
+## Generate Schema Embeddings
 
-**Run in Google Colab:**
-```python
-# Upload schema/source/*.md files to Colab
-# Run embedding notebook (provided separately)
-# Download embeddings/ folder
-# Place in project root
+**One-time setup:**
+```bash
+# Run embeddings notebook
+cd notebooks
+jupyter notebook generate_embeddings.ipynb
+
+# Or in VS Code: Open and run all cells
 ```
+**Output:**
+- `embeddings/` folder (gitignored)
+- `embeddings.zip` (for sharing/backup)
+- 81 chunks from 9 schema files
 
 ### 5. Start Services
 ```bash

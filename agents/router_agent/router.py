@@ -56,7 +56,11 @@ class RouterAgent:
             )
 
             # Parse JSON response
-            content = response.choices[0].message.content.strip()
+            message_content = response.choices[0].message.content
+            if message_content is None:
+                logger.error("OpenAI response message content is None.")
+                raise ValueError("OpenAI response message content is None.")
+            content = message_content.strip()
             
             # Remove markdown code blocks if present
             if content.startswith("```json"):

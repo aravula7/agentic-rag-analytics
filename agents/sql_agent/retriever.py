@@ -17,9 +17,9 @@ class SchemaRetriever:
         self,
         chroma_host: str = "localhost",
         chroma_port: int = 8082,
-        collection_name: str = "schema_embeddings",
+        collection_name: str = "agentic_rag_analytics_schema",
         embedding_model: str = "text-embedding-3-small",
-        openai_api_key: str = None,
+        openai_api_key: str = os.getenv("OPENAI_API_KEY", ""),
         persist_directory: str = "./embeddings"
     ):
         """Initialize Schema Retriever.
@@ -127,8 +127,9 @@ class SchemaRetriever:
         
         try:
             # Query by metadata filter
+            from typing import cast
             results = self.collection.get(
-                where={"table": {"$in": table_names}}
+                where=cast(dict, {"table": {"$in": table_names}})
             )
             
             if results and results['documents']:
