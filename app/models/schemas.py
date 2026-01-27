@@ -1,21 +1,19 @@
-"""Pydantic schemas for API."""
+"""Pydantic models for API schemas."""
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
 from datetime import datetime
 
 
 class QueryRequest(BaseModel):
-    """Request model for query endpoint."""
-    
-    query: str = Field(..., description="Natural language query", min_length=1)
-    user_email: Optional[str] = Field(None, description="Email for results delivery")
-    enable_cache: bool = Field(True, description="Use cached results if available")
+    """Request model for query execution."""
+    query: str
+    user_email: Optional[EmailStr] = None
+    enable_cache: bool = True
 
 
 class RoutingDecision(BaseModel):
     """Router agent decision."""
-    
     requires_sql: bool
     requires_email: bool
     tables_involved: List[str]
@@ -25,17 +23,19 @@ class RoutingDecision(BaseModel):
 
 class QueryMetadata(BaseModel):
     """Query execution metadata."""
-    
     row_count: int
     column_count: int
     execution_time_seconds: float
     columns: List[str]
-    s3_key: str
+    csv_s3_key: str
+    csv_s3_url: str
+    sql_s3_key: str
+    sql_s3_url: str
+    timestamp: str
 
 
 class QueryResponse(BaseModel):
-    """Response model for query endpoint."""
-    
+    """Response model for query execution."""
     success: bool
     query: str
     routing_decision: Optional[RoutingDecision] = None
@@ -44,13 +44,12 @@ class QueryResponse(BaseModel):
     metadata: Optional[QueryMetadata] = None
     error: Optional[str] = None
     cache_hit: bool = False
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: str = datetime.utcnow().isoformat()
 
 
 class HealthResponse(BaseModel):
     """Health check response."""
-    
     status: str
     version: str
-    timestamp: datetime = Field(default_factory=datetime.now)
-    services: Dict[str, str] = Field(default_factory=dict)
+    timestamp: str
+    services: dict

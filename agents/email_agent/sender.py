@@ -1,27 +1,29 @@
-"""Email Agent implementation."""
+"""Email Agent for sending query results via email."""
 
 import logging
+import os
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
-from typing import Dict, Any, Optional
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+from typing import Optional
 import pandas as pd
+
 from .templates import EMAIL_TEMPLATE_HTML, EMAIL_TEMPLATE_PLAIN
 
 logger = logging.getLogger(__name__)
 
 
 class EmailAgent:
-    """Email Agent for sending query results."""
+    """Send query results via email."""
 
     def __init__(
         self,
         smtp_host: str,
         smtp_port: int,
         smtp_user: str,
-        smtp_password: str,
-        from_email: Optional[str] = None
+        smtp_password: str
     ):
         """Initialize Email Agent.
         
@@ -30,90 +32,88 @@ class EmailAgent:
             smtp_port: SMTP server port
             smtp_user: SMTP username
             smtp_password: SMTP password
-            from_email: Sender email (defaults to smtp_user)
         """
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
-        self.from_email = from_email or smtp_user
-        logger.info(f"EmailAgent initialized for {self.from_email}")
+        
+        logger.info("EmailAgent initialized")
 
     def send_results(
         self,
         to_email: str,
         user_query: str,
         s3_url: str,
-        metadata: Dict[str, Any],
-        csv_path: Optional[str] = None,
-        preview_df: Optional[pd.DataFrame] = None
+        metadata: dict,
+        preview_df: Optional[pd.DataFrame] = None,
+        csv_attachment_path: Optional[str] = None
     ):
         """Send query results via email.
         
         Args:
             to_email: Recipient email address
             user_query: Original user query
-            s3_url: S3 URL of results CSV
+            s3_url: S3 URL for results CSV
             metadata: Query execution metadata
-            csv_path: Local path to CSV for attachment (optional)
-            preview_df: DataFrame preview for email body (optional)
+            preview_df: DataFrame with preview rows (optional)
+            csv_attachment_path: Local path to CSV file for attachment (optional)
         """
-        logger.info(f"Sending results email to {to_email}")
-
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"Query Results: {user_query[:50]}..."
-            msg['From'] = self.from_email
-            msg['To'] = to_email
+            logger.info(f"Sending results email to {to_email}")
 
-            # Generate preview table HTML
-            preview_html = ""
-            if preview_df is not None:
-                preview_html = f"""
-                <h3>Preview (first {len(preview_df)} rows):</h3>
-                {preview_df.to_html(index=False, border=1, classes='preview-table')}
-                <p><em>See attachment for full results</em></p>
-                """
+            message = MIMEMultipart('alternative')
+            message['Subject'] = f"Query Results: {user_query[:50]}..."
+            message['From'] = self.smtp_user
+            message['To'] = to_email
 
-            # Format email body
+            preview_html = self._generate_preview_table(preview_df) if preview_df is not None else ""
+
             html_body = EMAIL_TEMPLATE_HTML.format(
-                user_query=user_query,
+                query=user_query,
                 row_count=metadata.get('row_count', 'N/A'),
                 column_count=metadata.get('column_count', 'N/A'),
-                execution_time=f"{metadata.get('execution_time_seconds', 0):.2f}",
+                execution_time=metadata.get('execution_time_seconds', 'N/A'),
+                preview_table=preview_html,
                 download_url=s3_url,
-                preview_table=preview_html
+                sql_url=metadata.get('sql_s3_url', '#')
             )
 
             plain_body = EMAIL_TEMPLATE_PLAIN.format(
-                user_query=user_query,
+                query=user_query,
                 row_count=metadata.get('row_count', 'N/A'),
                 column_count=metadata.get('column_count', 'N/A'),
-                execution_time=f"{metadata.get('execution_time_seconds', 0):.2f}",
-                download_url=s3_url
+                execution_time=metadata.get('execution_time_seconds', 'N/A'),
+                download_url=s3_url,
+                sql_url=metadata.get('sql_s3_url', '#')
             )
 
-            # Attach both versions
-            msg.attach(MIMEText(plain_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
+            part1 = MIMEText(plain_body, 'plain')
+            part2 = MIMEText(html_body, 'html')
 
-            # Attach CSV if provided
-            if csv_path:
-                with open(csv_path, 'rb') as f:
-                    attachment = MIMEApplication(f.read(), _subtype='csv')
-                    attachment.add_header(
-                        'Content-Disposition',
-                        'attachment',
-                        filename='query_results.csv'
-                    )
-                    msg.attach(attachment)
+            message.attach(part1)
+            message.attach(part2)
 
-            # Send email
+            if csv_attachment_path and os.path.exists(csv_attachment_path):
+                with open(csv_attachment_path, 'rb') as f:
+                    csv_data = f.read()
+
+                csv_part = MIMEBase('application', 'octet-stream')
+                csv_part.set_payload(csv_data)
+                encoders.encode_base64(csv_part)
+                csv_part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename={os.path.basename(csv_attachment_path)}'
+                )
+                message.attach(csv_part)
+
+                os.remove(csv_attachment_path)
+                logger.info(f"Attached and removed local CSV: {csv_attachment_path}")
+
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+                server.send_message(message)
 
             logger.info(f"Email sent successfully to {to_email}")
 
@@ -121,49 +121,87 @@ class EmailAgent:
             logger.error(f"Failed to send email: {e}")
             raise
 
+    def _generate_preview_table(self, df: pd.DataFrame) -> str:
+        """Generate HTML table from DataFrame.
+        
+        Args:
+            df: DataFrame to convert
+            
+        Returns:
+            HTML table string
+        """
+        if df is None or df.empty:
+            return "<p>No preview available</p>"
+
+        html = '<table style="border-collapse: collapse; width: 100%; margin: 20px 0;">'
+        html += '<thead><tr style="background-color: #f0f0f0;">'
+
+        for col in df.columns:
+            html += f'<th style="border: 1px solid #ddd; padding: 8px; text-align: left;">{col}</th>'
+        html += '</tr></thead><tbody>'
+
+        for _, row in df.iterrows():
+            html += '<tr>'
+            for val in row:
+                html += f'<td style="border: 1px solid #ddd; padding: 8px;">{val}</td>'
+            html += '</tr>'
+
+        html += '</tbody></table>'
+        return html
+
     def send_error_notification(
         self,
         to_email: str,
         user_query: str,
-        error_message: str
+        error: str
     ):
         """Send error notification email.
         
         Args:
             to_email: Recipient email address
             user_query: Original user query
-            error_message: Error description
+            error: Error message
         """
-        logger.info(f"Sending error notification to {to_email}")
-
         try:
-            msg = MIMEText(f"""
-Query Execution Failed
-=====================
+            logger.info(f"Sending error notification to {to_email}")
 
-Your Query:
-{user_query}
+            message = MIMEMultipart('alternative')
+            message['Subject'] = f"Query Failed: {user_query[:50]}..."
+            message['From'] = self.smtp_user
+            message['To'] = to_email
 
-Error:
-{error_message}
+            html_body = f"""
+            <html>
+            <body>
+                <h2>Query Execution Failed</h2>
+                <p><strong>Your Query:</strong> {user_query}</p>
+                <p><strong>Error:</strong> {error}</p>
+                <p>Please try again or contact support if the issue persists.</p>
+            </body>
+            </html>
+            """
 
-Please try rephrasing your query or contact support.
-
----
-Agentic RAG Analytics System
-            """)
+            plain_body = f"""
+            Query Execution Failed
             
-            msg['Subject'] = f"Query Failed: {user_query[:50]}..."
-            msg['From'] = self.from_email
-            msg['To'] = to_email
+            Your Query: {user_query}
+            Error: {error}
+            
+            Please try again or contact support if the issue persists.
+            """
+
+            part1 = MIMEText(plain_body, 'plain')
+            part2 = MIMEText(html_body, 'html')
+
+            message.attach(part1)
+            message.attach(part2)
 
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+                server.send_message(message)
 
             logger.info(f"Error notification sent to {to_email}")
 
         except Exception as e:
             logger.error(f"Failed to send error notification: {e}")
-            raise

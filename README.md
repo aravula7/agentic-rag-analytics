@@ -1,349 +1,353 @@
 # Agentic RAG Analytics
 
-Multi-agent SQL query system using LangGraph to interact with PostgreSQL analytics warehouse.
+Natural language to SQL query execution system using a multi-agent architecture with LangGraph. The system converts user questions into SQL queries, executes them against a PostgreSQL database, and delivers results via email or web interface.
 
-## 🎯 Project Overview
+## Architecture Overview
 
-This project demonstrates a production-ready agentic RAG system that converts natural language questions into SQL queries, executes them, and delivers results via email. Built with a focus on separation of concerns, each agent has a single responsibility in the pipeline.
+### Multi-Agent System
+- **Router Agent**: Analyzes queries using GPT-4o to determine SQL requirements and email delivery needs
+- **SQL Agent**: Generates SQL queries using Claude 3.5 Haiku with RAG-based schema retrieval
+- **Executor Agent**: Executes queries safely with timeout protection and stores results in cloud storage
+- **Email Agent**: Delivers formatted results with CSV attachments via SMTP
 
-### Agent Architecture
-```
-User Query
-    ↓
-Router Agent (GPT-4o)
-    ├─→ Determines if SQL is required
-    ├─→ Determines if email is required
-    └─→ Identifies relevant tables/predictions
-    ↓
-SQL Agent (Claude Haiku 4)
-    ├─→ Retrieves relevant schema from Chroma embeddings
-    ├─→ Generates PostgreSQL query
-    └─→ NO execution (generation only)
-    ↓
-Executor Agent (psycopg2)
-    ├─→ Executes SQL query
-    ├─→ Writes results to CSV
-    └─→ Uploads CSV to S3/MinIO
-    ↓
-Email Agent (Gmail/SES)
-    ├─→ Reads CSV from S3/MinIO
-    ├─→ Formats email with results
-    └─→ Sends via SMTP
-```
+### Technology Stack
 
-## 🏗️ Architecture Components
+**Backend:**
+- FastAPI for REST API
+- LangGraph for agent orchestration
+- ChromaDB for schema embeddings (local)
+- OpenAI GPT-4o for routing and embeddings
+- Anthropic Claude 3.5 Haiku for SQL generation
 
-### Agents (LangGraph)
+**Storage:**
+- Supabase PostgreSQL for data warehouse
+- Supabase Storage (S3-compatible) for result files
+- Upstash Redis for two-layer caching (SQL + results)
 
-**Router Agent** (`agents/router_agent/`)
-- **LLM**: OpenAI GPT-4o
-- **Responsibility**: Planning only - decides query requirements
-- **No database access**: Pure reasoning layer
+**Frontend:**
+- Streamlit for web interface
 
-**SQL Agent** (`agents/sql_agent/`)
-- **LLM**: Anthropic Claude Haiku 4 (`claude-haiku-4-20250514`)
-- **Responsibility**: SQL generation only
-- **RAG**: Retrieves schema context from Chroma embeddings
-- **No execution**: Returns SQL string
+**Monitoring:**
+- Langfuse for agent tracing and cost tracking
 
-**Executor Agent** (`agents/executor_agent/`)
-- **Technology**: psycopg2 (Python PostgreSQL driver)
-- **Responsibility**: Execute SQL, write CSV, upload to S3
-- **Retry Logic**: SQL Agent regenerates on error (max 3 attempts)
-- **Deterministic**: No LLM reasoning
+## Features
 
-**Email Agent** (`agents/email_agent/`)
-- **Technology**: Python SMTP (Gmail) / AWS SES (production)
-- **Responsibility**: Read CSV from S3, format and send email
-- **No database access**: Works only with S3 artifacts
+### Core Capabilities
+- Natural language to SQL conversion
+- Multi-table query support with automatic JOIN generation
+- Query result caching (24-hour TTL)
+- SQL query caching for instant regeneration
+- Email delivery with CSV attachments
+- Real-time query execution tracking
+- Secure read-only database access
 
-### Backend (FastAPI)
+### Supported Query Types
+- Revenue analytics and aggregations
+- Customer lifetime value calculations
+- Churn risk analysis
+- Demand forecasting
+- Multi-region comparisons
+- Time-series analysis
 
-- **API Endpoints** (`app/routers/query.py`): POST /query endpoint
-- **Redis Caching** (`app/utils/redis_cache.py`): Caches S3 paths by query hash
-- **Langfuse Tracking** (`app/utils/langfuse_tracker.py`): Monitors all 4 agents separately
-- **Pydantic Models** (`app/models/schemas.py`): Request/response validation
-
-### Frontend (Streamlit)
-
-- **Chat Interface** (`streamlit_app/components/chat_ui.py`): Natural language query input
-- **Result Viewer** (`streamlit_app/components/result_viewer.py`): Display SQL, results, agent reasoning
-- **Analytics Dashboard** (`streamlit_app/pages/analytics.py`): Query history, cache hit rates
-
-### Schema Embeddings
-
-**Structured Markdown Files** (`schema/source/`)
-- One file per table (customers, products, orders, etc.)
-- Relationships file for join patterns
-- Analytics patterns file for common query concepts
-- **Embedding Model**: OpenAI `text-embedding-3-small`
-- **Vector DB**: Chroma DB
-- **Generation**: One-time in Colab, loaded at startup
-
-### Storage
-
-**PostgreSQL** (Supabase - development, RDS - production)
-- Clean normalized tables (customers, products, orders, order_items, subscriptions)
-- ML prediction tables (churn_predictions, forecast_predictions)
-
-**MinIO** (local) / **S3** (production)
-- CSV query results
-- Email attachments
-- Report artifacts
-
-**Redis**
-- Cache S3 paths by query hash
-- 24-hour TTL
-- 99% hit rate target after warmup
-
-**Chroma DB**
-- Schema embeddings
-- Persistent storage in `./embeddings/`
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.11.9
-- Docker Desktop
-- MinIO (local S3-compatible storage)
-- PostgreSQL access (Supabase)
-- OpenAI API key
-- Anthropic API key
-- Langfuse account
-
-### 1. Clone and Setup
-```bash
-git clone https://github.com/YOUR_USERNAME/agentic-rag-analytics.git
-cd agentic-rag-analytics
-
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-```bash
-# Copy environment template
-copy .env.example .env  # Windows
-cp .env.example .env    # Linux/Mac
-
-# Edit .env with your credentials
-# - Database: Supabase connection details
-# - S3/MinIO: MinIO local endpoint
-# - LLM APIs: OpenAI and Anthropic keys
-# - Redis, Chroma, Langfuse settings
-```
-
-### 3. Start MinIO (Local Development)
-
-**Option A: Docker (Recommended)**
-```bash
-docker-compose up minio minio-client -d
-```
-
-**Option B: Manual**
-```bash
-# Start MinIO server
-minio.exe server C:\minio\data --console-address ":9001"
-
-# Access console: http://localhost:9001
-# Login: minioadmin / minioadmin
-# Create bucket: rag-reports
-```
-
-## Generate Schema Embeddings
-
-**One-time setup:**
-```bash
-# Run embeddings notebook
-cd notebooks
-jupyter notebook generate_embeddings.ipynb
-
-# Or in VS Code: Open and run all cells
-```
-**Output:**
-- `embeddings/` folder (gitignored)
-- `embeddings.zip` (for sharing/backup)
-- 81 chunks from 9 schema files
-
-### 5. Start Services
-```bash
-# Start all services
-docker-compose up -d
-
-# Verify services
-docker ps
-
-# Expected services:
-# - rag_minio (ports 9000, 9001)
-# - rag_redis (port 6380)
-# - rag_chroma (port 8082)
-# - rag_fastapi (port 8001)
-# - rag_streamlit (port 8501)
-```
-
-### 6. Access Application
-
-- **Streamlit UI**: http://localhost:8501
-- **FastAPI Docs**: http://localhost:8001/docs
-- **MinIO Console**: http://localhost:9001
-- **Chroma Admin**: http://localhost:8082
-
-## 📊 Example Queries
-```
-"Show me top 10 customers by revenue in the West region"
-"What are the high churn risk customers for December 2025?"
-"Forecast demand for Electronics category in Midwest for next month"
-"Compare revenue across all regions for Q4 2025"
-```
-
-## 🧪 Testing
-```bash
-# Run tests
-pytest tests/
-
-# Test individual agents
-pytest tests/test_agents.py::test_router_agent
-pytest tests/test_agents.py::test_sql_agent
-pytest tests/test_agents.py::test_executor_agent
-```
-
-## 📦 Deployment
-
-### Kubernetes (Demonstration Only)
-```bash
-# Apply K8s templates (NOT for production deployment)
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-
-# Note: K8s files are for portfolio demonstration
-# Actual deployment target is AWS ECS Fargate
-```
-
-### AWS ECS Fargate (Future)
-
-- Replace MinIO with S3
-- Replace Gmail with SES
-- Replace Supabase with RDS PostgreSQL
-- Use AWS Secrets Manager for credentials
-- Deploy FastAPI and Streamlit as ECS services
-
-### Agent Configuration
-
-**SQL Retry Logic**
-- Max retries: 3
-- Error-based regeneration: SQL Agent receives error message
-- Timeout: 30 seconds per query
-
-**Cache Strategy**
-- Cache key: MD5 hash of user query
-- TTL: 24 hours
-- Invalidation: Manual or on schema changes
-
-## 📈 Monitoring
-
-### Langfuse Dashboard
-
-Track all agents separately:
-- Router Agent: Planning decisions
-- SQL Agent: Query generation, retrieval context, retries
-- Executor Agent: Execution time, result size
-- Email Agent: Delivery success
-
-### Redis Cache Metrics
-
-- Hit rate: Target 99% after warmup
-- Cache size: Monitor memory usage
-- Eviction policy: LRU
-
-## 🛠️ Development
-
-### Adding New Tables
-
-1. Create schema file in `schema/source/table_name.md`
-2. Update `relationships.md` with new joins
-3. Regenerate embeddings in Colab
-4. Update `analytics_patterns.md` with new query patterns
-
-### Testing New Queries
-```bash
-# Use FastAPI directly
-curl -X POST http://localhost:8001/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Show top 5 products by revenue"}'
-```
-
-## 📝 Project Structure
+## Project Structure
 ```
 agentic-rag-analytics/
 ├── agents/
-│   ├── router_agent/       # GPT-4o planning
-│   ├── sql_agent/          # Claude Haiku SQL generation
-│   ├── executor_agent/     # psycopg2 execution
-│   └── email_agent/        # SMTP email delivery
+│   ├── router_agent/          # GPT-4o routing logic
+│   ├── sql_agent/             # Claude Haiku SQL generation + RAG
+│   ├── executor_agent/        # Query execution + S3 upload
+│   └── email_agent/           # Email delivery
 ├── app/
-│   ├── routers/            # FastAPI endpoints
-│   ├── utils/              # Redis, Langfuse utilities
-│   └── models/             # Pydantic schemas
-├── streamlit_app/
-│   ├── components/         # Reusable UI components
-│   └── pages/              # Multi-page app
+│   ├── routers/               # FastAPI endpoints
+│   ├── utils/                 # Redis cache, Langfuse tracker
+│   ├── models/                # Pydantic schemas
+│   ├── config.py              # Environment configuration
+│   └── main.py                # FastAPI application
+├── streamlit_app/             # Web interface
 ├── schema/
-│   └── source/             # Structured .md files for embeddings
-├── embeddings/             # Chroma DB (gitignored)
-├── config/                 # Service configurations
-├── k8s/                    # Kubernetes templates (demo)
-├── tests/                  # Unit and integration tests
-├── docker-compose.yml      # Local development
-├── requirements.txt        # Python dependencies
+│   └── source/                # Database schema documentation (9 files)
+├── embeddings/                # ChromaDB vector store (gitignored)
+├── notebooks/                 # Embedding generation notebook
+├── tests/                     # Unit and integration tests
+├── .env.example               # Environment variables template
+├── requirements.txt           # Python dependencies
 └── README.md
 ```
 
-## 🎓 Key Design Decisions
+## Prerequisites
 
-### Why Separate SQL Generation from Execution?
-- **Testability**: SQL can be validated without database access
-- **Security**: SQL Agent has no database credentials
-- **Debugging**: Inspect generated SQL before execution
-- **Retry Logic**: Regenerate SQL based on execution errors
+- Python 3.11.9
+- Supabase account (PostgreSQL + Storage)
+- Upstash account (Redis)
+- OpenAI API key
+- Anthropic API key
+- Gmail account with app password (for email delivery)
+- Langfuse account (optional, for monitoring)
 
-### Why psycopg2 Instead of Spark?
-- **Latency**: Sub-second response vs. 2-5 second JVM startup
-- **Simplicity**: No cluster management, pure Python
-- **Cost**: No Spark driver/executor overhead
-- **Use Case**: Analytics queries on normalized tables, not big data ETL
+## Installation
 
-### Why Claude Haiku for SQL?
-- **Cost**: 20x cheaper than GPT-4o
-- **Quality**: Excellent SQL generation capabilities
-- **Speed**: Lower latency than larger models
-- **Budget**: Preserves OpenAI credits for planning/orchestration
+### 1. Clone Repository
+```bash
+git clone https://github.com/yourusername/agentic-rag-analytics.git
+cd agentic-rag-analytics
+```
 
-### Why Chroma for Embeddings?
-- **Simplicity**: Single-node vector DB, no cluster
-- **Python Native**: Easy integration
-- **Persistent**: Disk-backed storage
-- **Lightweight**: Perfect for schema documentation scale
+### 2. Create Virtual Environment
+```bash
+python -m venv venv
 
-## 🤝 Contributing
+# Windows
+venv\Scripts\activate
 
-This is a portfolio project. Contributions are not currently accepted, but feedback is welcome!
+# macOS/Linux
+source venv/bin/activate
+```
 
-## 📄 License
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-MIT License - See LICENSE file for details
+### 4. Configure Environment Variables
+```bash
+# Copy template
+cp .env.example .env
 
-## 📧 Contact
+# Edit .env with your credentials
+notepad .env  # Windows
+nano .env     # macOS/Linux
+```
 
-For questions or interview discussions, contact: [your_email@example.com]
+Required variables:
+- Database: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- Supabase Storage: `S3_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- Upstash Redis: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- OpenAI: `OPENAI_API_KEY`
+- Anthropic: `ANTHROPIC_API_KEY`
+- Email: `SMTP_USER`, `SMTP_PASSWORD`
+- Langfuse (optional): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`
 
----
+### 5. Generate Schema Embeddings
 
-**Built with:** Python 3.11 • LangChain • FastAPI • Streamlit • PostgreSQL • Redis • MinIO • Chroma • Langfuse
+**Option A: Run Jupyter Notebook**
+```bash
+cd notebooks
+jupyter notebook generate_embeddings.ipynb
+# Run all cells
+# Download embeddings/ folder to project root
+```
+
+**Option B: Use Pre-generated Embeddings**
+```bash
+# If you have embeddings.zip
+unzip embeddings.zip
+```
+
+## Running the Application
+
+### Local Development (No Docker)
+
+**Terminal 1: ChromaDB**
+```bash
+chroma run --path ./embeddings --port 8082
+```
+
+**Terminal 2: FastAPI Backend**
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+**Terminal 3: Streamlit Frontend**
+```bash
+streamlit run streamlit_app/app.py --server.port 8501
+```
+
+### Access Points
+- API Documentation: http://localhost:8001/docs
+- Health Check: http://localhost:8001/health
+- Streamlit UI: http://localhost:8501
+
+## Usage
+
+### Via Streamlit UI
+
+1. Open http://localhost:8501
+2. Enter natural language query (e.g., "Show top 10 customers by revenue")
+3. Optionally provide email for delivery
+4. Click "Execute Query"
+5. View results and download CSV
+
+### Via API
+```bash
+curl -X POST http://localhost:8001/query/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Show top 10 customers by revenue",
+    "user_email": "your@email.com",
+    "enable_cache": true
+  }'
+```
+
+### Example Queries
+```
+Show top 10 customers by revenue
+What are the high churn risk customers for December 2025?
+Compare revenue across all regions for Q4 2025
+Email me the list of customers with failed payments
+Show best selling products by category
+What is the average order value by region?
+List customers who have not ordered in 90 days
+```
+
+## Database Schema
+
+### Dimension Tables
+- **customers**: Customer master data with demographics
+- **products**: Product catalog with pricing
+
+### Fact Tables
+- **orders**: Order transactions
+- **order_items**: Line-item details
+- **subscriptions**: Subscription events and status
+
+### Analytics Tables
+- **churn_predictions**: ML-based churn risk scores
+- **forecast_predictions**: Demand forecasting results
+
+## Caching Strategy
+
+### Two-Layer Cache
+1. **SQL Cache**: Stores generated SQL queries (key: query hash)
+2. **Result Cache**: Stores execution results and metadata (key: query hash)
+
+### Cache Behavior
+- First execution: Generate SQL, execute, cache both
+- Second execution: Retrieve SQL from cache, execute, cache result
+- Third+ execution: Retrieve result directly from cache
+- TTL: 24 hours for both layers
+
+### Cache Performance
+- Cold query: 10-15 seconds (full pipeline)
+- Warm query (SQL cached): 3-5 seconds (execution only)
+- Hot query (result cached): <1 second (instant retrieval)
+
+## Cost Optimization
+
+### Model Selection
+- **Routing**: GPT-4o ($2.50/$10.00 per 1M tokens)
+- **SQL Generation**: Claude 3.5 Haiku ($0.80/$4.00 per 1M tokens)
+- **Embeddings**: text-embedding-3-small ($0.02 per 1M tokens)
+
+### Estimated Costs
+- Per query (uncached): $0.01-0.03
+- Per 1000 queries with 50% cache hit: $5-15
+- Monthly (10K queries): $50-150
+
+## Monitoring
+
+### Langfuse Integration
+- Agent-level tracing (Router, SQL, Executor, Email)
+- Token usage tracking per model
+- Latency measurements
+- Error tracking and retry counts
+- Cost attribution by query
+
+### Metrics Dashboard
+Access Langfuse dashboard at https://cloud.langfuse.com to view:
+- Query success/failure rates
+- Average execution time per agent
+- Cache hit rates
+- API cost breakdown
+- Query complexity distribution
+
+## Testing
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_agents.py
+
+# Run with coverage
+pytest --cov=app --cov=agents
+```
+
+## Deployment
+
+### Docker Deployment
+
+**Build Images:**
+```bash
+docker build -f Dockerfile.api -t rag-analytics-api .
+docker build -f Dockerfile.streamlit -t rag-analytics-streamlit .
+```
+
+**Run Containers:**
+```bash
+docker-compose up -d
+```
+
+### Production Considerations
+- Use production database with connection pooling
+- Enable HTTPS/TLS for API endpoints
+- Implement rate limiting
+- Set up log aggregation (e.g., CloudWatch)
+- Use secrets manager for credentials (e.g., AWS Secrets Manager)
+- Configure autoscaling based on load
+- Set up database read replicas for high traffic
+
+## Troubleshooting
+
+### Common Issues
+
+**ChromaDB Connection Failed**
+```bash
+# Ensure ChromaDB is running
+chroma run --path ./embeddings --port 8082
+
+# Check embeddings exist
+ls embeddings/
+```
+
+**Redis Cache Errors**
+```bash
+# Clear cache via API
+curl -X POST http://localhost:8001/clear-cache
+
+# Verify Upstash credentials in .env
+```
+
+**SQL Generation Errors**
+- Check Anthropic API key and quota
+- Verify schema files exist in schema/source/
+- Review Langfuse trace for error details
+
+**Email Delivery Failed**
+- Verify Gmail app password (not regular password)
+- Enable "Less secure app access" if needed
+- Check SMTP settings in .env
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/your-feature`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/your-feature`)
+5. Open Pull Request
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Acknowledgments
+
+- LangChain for agent orchestration framework
+- Anthropic for Claude API
+- OpenAI for GPT and embedding models
+- Supabase for managed PostgreSQL and storage
+- Upstash for serverless Redis
+- Langfuse for monitoring and tracing
+
+## Contact
+
+For questions or support, please open an issue on GitHub.

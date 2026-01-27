@@ -1,115 +1,87 @@
-"""SQL Agent implementation using Claude Haiku."""
+"""SQL Agent for generating SQL queries."""
 
 import logging
-from typing import Dict, Any, Optional
+import re
+from typing import Optional, List
+
 from anthropic import Anthropic
-from .retriever import SchemaRetriever
-from .prompts import (
-    SQL_GENERATION_SYSTEM_PROMPT,
-    SQL_GENERATION_USER_TEMPLATE,
-    SQL_REGENERATION_TEMPLATE
-)
+from anthropic.types import TextBlock
+from langfuse import observe
 
 logger = logging.getLogger(__name__)
 
+from .retriever import SchemaRetriever
+from .prompts import SQL_GENERATION_SYSTEM_PROMPT, SQL_REGENERATION_TEMPLATE
+
 
 class SQLAgent:
-    """SQL Agent for generating PostgreSQL queries using Claude Haiku."""
+    """SQL generation agent using Claude with RAG."""
 
     def __init__(
         self,
         anthropic_api_key: str,
         schema_retriever: SchemaRetriever,
-        model: str = "claude-haiku-4-20250514",
+        model: str = "claude-3-5-haiku-20241022",
         max_tokens: int = 1000
     ):
-        """Initialize SQL Agent.
-        
-        Args:
-            anthropic_api_key: Anthropic API key
-            schema_retriever: SchemaRetriever instance for RAG
-            model: Anthropic model to use
-            max_tokens: Maximum tokens in response
-        """
+        """Initialize SQL Agent."""
         self.client = Anthropic(api_key=anthropic_api_key)
-        self.retriever = schema_retriever
+        self.schema_retriever = schema_retriever
         self.model = model
         self.max_tokens = max_tokens
         logger.info(f"SQLAgent initialized with model: {model}")
 
+    @observe(name="sql_agent")  # This creates the observation!
     def generate_sql(
         self,
         query: str,
-        tables_involved: Optional[list] = None,
+        tables_involved: Optional[List[str]] = None,
         previous_sql: Optional[str] = None,
         error: Optional[str] = None
     ) -> str:
-        """Generate SQL query from natural language.
-        
-        Args:
-            query: User's natural language query
-            tables_involved: List of tables from Router Agent (optional)
-            previous_sql: Previous SQL that failed (for regeneration)
-            error: Error message from failed execution (for regeneration)
-            
-        Returns:
-            PostgreSQL SELECT query string
-        """
+        """Generate SQL query."""
         logger.info(f"Generating SQL for query: {query[:100]}...")
 
-        # Retrieve relevant schema context
+        # Retrieve schema context
         if tables_involved:
-            schema_context = self.retriever.get_table_context(tables_involved)
+            schema_context = self.schema_retriever.get_table_context(tables_involved)
         else:
-            schema_context = self.retriever.retrieve(query, top_k=5)
-        
-        if not schema_context:
-            logger.warning("No schema context retrieved, using empty context")
-            schema_context = "No schema context available"
+            schema_context = self.schema_retriever.retrieve(query)
 
-        # Build user message
+        logger.info(f"Retrieved context for tables: {tables_involved or 'all'}")
+
+        # Build prompt
         if previous_sql and error:
-            # Regeneration after error
-            user_message = SQL_REGENERATION_TEMPLATE.format(
-                error=error,
-                previous_sql=previous_sql,
-                query=query,
-                schema_context=schema_context
-            )
             logger.info("Regenerating SQL after error")
-        else:
-            # Initial generation
-            user_message = SQL_GENERATION_USER_TEMPLATE.format(
+            user_prompt = SQL_REGENERATION_TEMPLATE.format(
                 query=query,
-                schema_context=schema_context
+                schema_context=schema_context,
+                previous_sql=previous_sql,
+                error=error
             )
+        else:
+            user_prompt = f"Schema Context:\n{schema_context}\n\nUser Query: {query}"
 
         try:
-            # Call Claude API
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                system=SQL_GENERATION_SYSTEM_PROMPT,
+                temperature=0.0,
                 messages=[
-                    {"role": "user", "content": user_message}
+                    {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.0  # Deterministic SQL generation
+                system=SQL_GENERATION_SYSTEM_PROMPT
             )
 
-            # Extract SQL from response
-            sql_query = response.content[0].text.strip()
-            
-            # Clean up SQL (remove markdown if present)
-            if sql_query.startswith("```sql"):
-                sql_query = sql_query.replace("```sql\n", "").replace("\n```", "")
-            elif sql_query.startswith("```"):
-                sql_query = sql_query.replace("```\n", "").replace("\n```", "")
-            
-            # Ensure query ends with semicolon
-            if not sql_query.endswith(";"):
-                sql_query += ";"
-            
-            logger.info(f"Generated SQL: {sql_query[:200]}...")
+            content_block = response.content[0]
+            if not isinstance(content_block, TextBlock):
+                raise ValueError(f"Unexpected response type: {type(content_block)}")
+            sql_query = content_block.text.strip()
+
+            # Clean SQL
+            sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+
+            logger.info(f"Generated SQL: {sql_query[:100]}...")
             return sql_query
 
         except Exception as e:
@@ -117,27 +89,17 @@ class SQLAgent:
             raise
 
     def validate_sql_syntax(self, sql: str) -> bool:
-        """Basic SQL syntax validation.
-        
-        Args:
-            sql: SQL query string
-            
-        Returns:
-            True if basic syntax checks pass
-        """
-        # Basic checks
+        """Validate SQL syntax."""
         sql_upper = sql.upper().strip()
-        
-        # Must start with SELECT
+
         if not sql_upper.startswith("SELECT"):
             logger.error("SQL must start with SELECT")
             return False
-        
-        # Must not contain forbidden keywords
-        forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"]
-        for keyword in forbidden:
+
+        forbidden_keywords = ["DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE", "TRUNCATE"]
+        for keyword in forbidden_keywords:
             if keyword in sql_upper:
                 logger.error(f"SQL contains forbidden keyword: {keyword}")
                 return False
-        
+
         return True

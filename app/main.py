@@ -6,57 +6,32 @@ os.environ["ANONYMIZED_TELEMETRY"] = "False"
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.models.schemas import HealthResponse
-from app.routers import query_router
+from datetime import datetime
 
-# Configure logging
+from app.routers import query as query_router
+from app.config import settings
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-logger = logging.getLogger(__name__)
-
-# Create FastAPI app
 app = FastAPI(
     title="Agentic RAG Analytics API",
-    description="Multi-agent SQL query system with LangGraph",
+    description="Natural language to SQL query execution with multi-agent system",
     version="1.0.0"
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(query_router)
-
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint.
-    
-    Returns:
-        HealthResponse with service status
-    """
-    services = {
-        "database": "ok",  # TODO: Add actual health checks
-        "redis": "ok",
-        "chroma": "ok",
-        "s3": "ok"
-    }
-    
-    return HealthResponse(
-        status="healthy",
-        version="1.0.0",
-        services=services
-    )
+# Mount query router
+app.include_router(query_router.router, prefix="/query", tags=["Query"])
 
 
 @app.get("/")
@@ -69,11 +44,24 @@ async def root():
     }
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
-        reload=True
-    )
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {
+            "database": "ok",
+            "redis": "ok",
+            "chroma": "ok",
+            "s3": "ok"
+        }
+    }
+
+@app.post("/clear-cache")
+async def clear_cache():
+    """Clear all Redis cache."""
+    from app.routers.query import redis_cache
+    redis_cache.clear_all()
+    return {"message": "Cache cleared successfully"}

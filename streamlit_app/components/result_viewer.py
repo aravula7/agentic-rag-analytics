@@ -23,7 +23,7 @@ def render_results(response: Dict[str, Any]):
         st.success("✅ Query executed successfully")
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Results", "🔍 Query Details", "⚙️ Metadata", "📧 Email"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Results", "Query Details", "Metadata", "Email"])
     
     with tab1:
         render_results_tab(response)

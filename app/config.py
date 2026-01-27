@@ -9,11 +9,11 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Database
-    DB_HOST: Optional[str] = None
+    DB_HOST: str = os.getenv("DB_HOST", "")
     DB_PORT: int = 5432
-    DB_NAME: Optional[str] = None
-    DB_USER: Optional[str] = None
-    DB_PASSWORD: Optional[str] = None
+    DB_NAME: str = os.getenv("DB_NAME", "")
+    DB_USER: str = os.getenv("DB_USER", "")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 
     # S3/Supabase Storage
     S3_ENDPOINT_URL: str = os.getenv("S3_ENDPOINT_URL", "")
@@ -29,12 +29,12 @@ class Settings(BaseSettings):
     ENABLE_CACHE: bool = True
 
     # LLM APIs
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_GENERAL_MODEL: str = "gpt-4o"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_MAX_TOKENS: int = 500
 
-    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     ANTHROPIC_SQL_MODEL: str = os.environ.get("ANTHROPIC_SQL_MODEL", "")
     ANTHROPIC_MAX_TOKENS: int = 1000
 
@@ -45,16 +45,16 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./embeddings"
 
     # Langfuse
-    LANGFUSE_PUBLIC_KEY: Optional[str] = None
-    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_PUBLIC_KEY: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
     LANGFUSE_HOST: str = "https://us.cloud.langfuse.com"
 
     # Email
     EMAIL_PROVIDER: str = "gmail"
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
 
     # Application
     API_HOST: str = "0.0.0.0"

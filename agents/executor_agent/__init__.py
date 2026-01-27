@@ -1,4 +1,4 @@
-"""Executor Agent - SQL execution and S3 upload."""
+"""Executor Agent for SQL query execution."""
 
 from .executor import ExecutorAgent
 from .s3_uploader import S3Uploader

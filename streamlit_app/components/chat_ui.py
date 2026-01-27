@@ -33,7 +33,7 @@ def render_chat_interface() -> tuple:
         enable_cache = st.checkbox("Use cached results", value=True)
     
     # Submit button
-    submit = st.button("🚀 Execute Query", type="primary", width="stretch")
+    submit = st.button("Execute Query", type="primary", width="stretch")
     
     return query, user_email if user_email else None, enable_cache, submit
 
