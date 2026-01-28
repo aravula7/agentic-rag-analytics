@@ -24,7 +24,7 @@ class RedisCache:
         self.ttl = ttl
         logger.info("RedisCache initialized")
 
-    def _normalize_query(self, query: str) -> str:
+    def _normalize_query(self, query: Optional[str]) -> str:
         """Normalize query so semantically identical prompts map to same cache key."""
         # lower + collapse whitespace + trim
         return " ".join((query or "").split()).strip().lower()

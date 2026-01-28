@@ -180,7 +180,7 @@ All required variables are documented in `.env.example`. Key settings:
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |
 | `OPENAI_API_KEY` | OpenAI API key (for GPT-4o + embeddings) |
 | `ANTHROPIC_API_KEY` | Anthropic API key (for Claude Haiku) |
-| `ANTHROPIC_SQL_MODEL` | `claude-haiku-4-20250514` |
+| `ANTHROPIC_SQL_MODEL` | `claude-3-5-haiku-20241022` |
 | `SMTP_USER` | Gmail address |
 | `SMTP_PASSWORD` | Gmail app-specific password |
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key (optional) |

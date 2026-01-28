@@ -84,7 +84,11 @@ class TestSettings:
 
         # Temporarily remove AWS keys from the environment so defaults apply
         with patch.dict(os.environ, {}, clear=True):
-            settings = Settings(_env_file=None)
+            class SettingsNoEnv(Settings):
+                model_config = Settings.model_config.copy()
+                model_config["env_file"] = None
+
+            settings = SettingsNoEnv()
 
         assert settings.AWS_ACCESS_KEY_ID is None
         assert settings.AWS_SECRET_ACCESS_KEY is None

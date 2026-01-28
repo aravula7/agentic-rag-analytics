@@ -121,7 +121,7 @@ class EmailAgent:
             logger.error(f"Failed to send email: {e}")
             raise
 
-    def _generate_preview_table(self, df: pd.DataFrame) -> str:
+    def _generate_preview_table(self, df: Optional[pd.DataFrame]) -> str:
         """Generate HTML table from DataFrame.
         
         Args:

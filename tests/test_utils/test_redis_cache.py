@@ -3,6 +3,7 @@
 import json
 import hashlib
 import pytest
+from typing import cast
 from unittest.mock import Mock, MagicMock, patch
 
 from app.utils.redis_cache import RedisCache
@@ -137,7 +138,7 @@ class TestRedisCacheNormalization:
             rest_token="test-token"
         )
 
-        result = cache._normalize_query(None)
+        result = cache._normalize_query(cast(str, None))
 
         assert result == ""
 
