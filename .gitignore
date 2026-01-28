@@ -18,6 +18,7 @@ embeddings.zip
 *.faiss
 *.index
 chroma_data/
+chroma.log
 
 # Logs
 logs/
@@ -55,9 +56,6 @@ data/
 reports/
 outputs/
 
-# MinIO data
-minio_data/
-
 # Redis data
 redis_data/
 
@@ -93,3 +91,6 @@ dmypy.json
 *.tmp
 *.temp
 ~*
+
+#tests
+temp_outputs/

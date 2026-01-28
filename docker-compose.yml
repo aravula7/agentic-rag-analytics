@@ -1,114 +1,67 @@
 version: '3.8'
 
 services:
-  # MinIO - S3-compatible storage
-  minio:
-    image: minio/minio:latest
-    container_name: rag_minio
-    ports:
-      - "9000:9000"  # API
-      - "9001:9001"  # Console
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    networks:
-      - rag_network
-
-  # MinIO Client - Auto-create bucket
-  minio-client:
-    image: minio/mc:latest
-    container_name: rag_minio_client
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      sleep 5;
-      /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb local/rag-reports --ignore-existing;
-      /usr/bin/mc anonymous set download local/rag-reports;
-      exit 0;
-      "
-    networks:
-      - rag_network
-
-  # Redis - Caching
-  redis:
-    image: redis:7-alpine
-    container_name: rag_redis
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - rag_network
-
-  # Chroma - Vector DB
-  chroma:
+  chromadb:
     image: chromadb/chroma:latest
-    container_name: rag_chroma
+    container_name: rag-chromadb
+    volumes:
+      - ./embeddings:/chroma/chroma
     ports:
       - "8082:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
     environment:
-      - ALLOW_RESET=TRUE
+      - ANONYMIZED_TELEMETRY=False
+      - ALLOW_RESET=True
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - rag_network
+      - rag-network
 
-  # FastAPI Backend
-  fastapi:
+  api:
     build:
       context: .
       dockerfile: Dockerfile.api
-    container_name: rag_fastapi
-    env_file:
-      - .env
+    container_name: rag-api
     ports:
       - "8001:8001"
-    volumes:
-      - ./app:/app/app
-      - ./agents:/app/agents
-      - ./schema:/app/schema
-      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
     depends_on:
-      - redis
-      - chroma
-      - minio
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - rag_network
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+      - rag-network
+    volumes:
+      - ./temp_outputs:/app/temp_outputs
 
-  # Streamlit Frontend
   streamlit:
     build:
       context: .
       dockerfile: Dockerfile.streamlit
-    container_name: rag_streamlit
-    env_file:
-      - .env
+    container_name: rag-streamlit
     ports:
       - "8501:8501"
-    volumes:
-      - ./streamlit_app:/app/streamlit_app
+    environment:
+      - API_URL=http://api:8001
     depends_on:
-      - fastapi
+      api:
+        condition: service_healthy
     networks:
-      - rag_network
-    command: streamlit run streamlit_app/app.py --server.port 8501
-
-volumes:
-  minio_data:
-  redis_data:
-  chroma_data:
+      - rag-network
 
 networks:
-  rag_network:
+  rag-network:
     driver: bridge
+
+volumes:
+  embeddings:

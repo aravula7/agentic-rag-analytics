@@ -8,6 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from app.routers import query as query_router
 from app.config import settings
 
@@ -40,7 +43,7 @@ async def root():
     return {
         "message": "Agentic RAG Analytics API",
         "version": "1.0.0",
-        "docs": "/docs"
+        "docs": "/docs",
     }
 
 
@@ -51,17 +54,4 @@ async def health_check():
         "status": "healthy",
         "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat(),
-        "services": {
-            "database": "ok",
-            "redis": "ok",
-            "chroma": "ok",
-            "s3": "ok"
-        }
     }
-
-@app.post("/clear-cache")
-async def clear_cache():
-    """Clear all Redis cache."""
-    from app.routers.query import redis_cache
-    redis_cache.clear_all()
-    return {"message": "Cache cleared successfully"}
