@@ -31,7 +31,7 @@ class SQLAgent:
         self.max_tokens = max_tokens
         logger.info(f"SQLAgent initialized with model: {model}")
 
-    @observe(name="sql_agent")  # This creates the observation!
+    @observe(name="sql_agent", as_type="generation")  # This creates the observation!
     def generate_sql(
         self,
         query: str,

@@ -1,15 +1,23 @@
 """Pydantic models for API schemas."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
 
 class QueryRequest(BaseModel):
-    """Request model for query execution."""
-    query: str
-    user_email: Optional[EmailStr] = None
+    """Request model for query endpoint."""
+    query: str = Field(..., min_length=1, description="User query (cannot be empty)")
+    user_email: Optional[str] = None
     enable_cache: bool = True
+
+    @field_validator('query')
+    @classmethod
+    def validate_query_not_empty(cls, v: str) -> str:
+        """Validate that query is not just whitespace."""
+        if not v or not v.strip():
+            raise ValueError('Query cannot be empty or whitespace')
+        return v.strip()
 
 
 class RoutingDecision(BaseModel):

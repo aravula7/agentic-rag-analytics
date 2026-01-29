@@ -22,7 +22,7 @@ class RouterAgent:
         self.model = model
         logger.info("RouterAgent initialized with Langfuse tracing")
 
-    @observe(name="router_agent")  # This creates the trace!
+    @observe(name="router_agent", as_type="generation")  # This creates the trace!
     def route(self, query: str) -> Dict[str, Any]:
         """Route query and determine requirements."""
         logger.info(f"Routing query: {query[:100]}...")
