@@ -111,17 +111,54 @@ agentic-rag-analytics/
 │   ├── utils/
 │   │   └── redis_cache.py    # Redis caching utilities
 │   └── config.py             # Settings management
-├── data/
-│   └── sample_schema.json    # Database schema for ChromaDB ingestion
+├── streamlit_app/
+│   ├── app.py                 # Streamlit main entry point
+│   ├── components/
+│   │   ├── chat_ui.py        # Chat input interface + example queries
+│   │   └── result_viewer.py  # Results display + metadata viewer
+│   └── pages/
+│       └── analytics.py      # Analytics dashboard page
+├── schema/
+│   └── source/                # Schema documentation for ChromaDB ingestion
+│       ├── customers.md
+│       ├── products.md
+│       ├── orders.md
+│       ├── order_items.md
+│       ├── subscriptions.md
+│       ├── churn_predictions.md
+│       ├── forecast_predictions.md
+│       ├── analytics_patterns.md
+│       └── relationships.md
+├── notebooks/
+│   └── generate_embeddings.ipynb  # ChromaDB embedding generation
+├── embeddings/                # ChromaDB vector database files
 ├── tests/
-│   ├── test_graph_nodes.py       # Unit tests for graph nodes
-│   ├── test_graph_workflow.py    # Integration tests for graph
-│   └── test_api/
-│       └── test_query_endpoint.py # API endpoint tests
+│   ├── conftest.py                # Shared test fixtures
+│   ├── test_graph_nodes.py        # Unit tests for graph nodes
+│   ├── test_graph_workflow.py     # Integration tests for graph
+│   ├── test_api/
+│   │   ├── test_query_endpoint.py # API endpoint tests
+│   │   └── test_health_endpoint.py # Health check tests
+│   ├── test_agents/
+│   │   ├── test_email_agent.py    # Email agent tests
+│   │   └── test_executor_agent.py # Executor agent tests
+│   └── test_utils/
+│       ├── test_config.py         # Config tests
+│       └── test_redis_cache.py    # Redis cache tests
+├── k8s/
+│   ├── deployment.yaml        # K8s deployments (ChromaDB, API, Streamlit)
+│   ├── service.yaml           # K8s services
+│   ├── configmap.yaml         # Non-sensitive configuration
+│   └── secret.yaml.example    # Secret template
 ├── docs/
-│   └── images/               # Documentation images
-├── .env.example              # Environment variable template
+│   └── images/                # Documentation images
+├── docker-compose.yml         # Multi-container setup
+├── Dockerfile.api             # FastAPI container
+├── Dockerfile.streamlit       # Streamlit container
+├── .env.example               # Environment variable template
+├── pytest.ini                 # Test configuration
 ├── requirements.txt
+├── LICENSE
 └── README.md
 ```
 
@@ -164,17 +201,25 @@ cp .env.example .env
 # Edit .env with your credentials
 ```
 
-5. **Initialize ChromaDB with schema**
+5. **Initialize ChromaDB with schema embeddings**
 ```bash
-python -m agents.sql_agent.schema_ingestion
+# Run the embedding generation notebook
+jupyter notebook notebooks/generate_embeddings.ipynb
 ```
 
-6. **Run the application**
+6. **Run the API**
 ```bash
 uvicorn app.main:app --reload --port 8001
 ```
 
 The API will be available at `http://localhost:8001`
+
+7. **Run the Streamlit UI**
+```bash
+streamlit run streamlit_app/app.py --server.port 8501
+```
+
+The UI will be available at `http://localhost:8501`
 
 ---
 
@@ -395,6 +440,63 @@ Key configurations:
 - Upstash Redis credentials
 - Langfuse project keys
 - SMTP settings (for email delivery)
+
+---
+
+## Streamlit UI
+
+An interactive frontend built with Streamlit for querying the system via a chat interface.
+
+### Features
+- Natural language query input with example suggestions
+- Optional email recipient field for result delivery
+- Cache toggle for controlling caching behavior
+- Result viewer with routing decisions, generated SQL, and S3 download links
+- Query history sidebar (last 10 queries)
+- Session statistics (total queries, cache hits, success rate)
+
+### Running
+```bash
+streamlit run streamlit_app/app.py --server.port 8501
+```
+
+---
+
+## Deployment
+
+### Docker Compose
+
+Run all services with a single command:
+```bash
+docker-compose up -d
+```
+
+**Services:**
+| Service | Port | Description |
+|---------|------|-------------|
+| ChromaDB | 8082 | Vector database |
+| FastAPI | 8001 | REST API |
+| Streamlit | 8501 | Interactive UI |
+
+All services are connected via a `rag-network` Docker network. Embeddings are persisted via a named volume.
+
+### Kubernetes
+
+Kubernetes manifests are provided in the `k8s/` directory:
+
+```bash
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml       # Create from secret.yaml.example
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+```
+
+**Deployments:**
+- ChromaDB (1 replica, 5Gi PersistentVolume for embeddings)
+- FastAPI API (2 replicas with liveness/readiness probes)
+- Streamlit UI (1 replica)
+
+Resource limits and health checks are configured for all deployments.
 
 ---
 
